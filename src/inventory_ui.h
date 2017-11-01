@@ -115,11 +115,14 @@ class inventory_entry
         const item_category *get_category_ptr() const;
         long get_invlet() const;
         nc_color get_invlet_color() const;
+        /** Get cached name of item used for the purpose of sorting. */
+        const std::string &get_sort_name() const;
 
     private:
         size_t stack_size;
         const item_category *custom_category;
         bool enabled = true;
+        mutable std::string sort_name;
 
 };
 
@@ -141,7 +144,7 @@ class inventory_selector_preset
             return std::string();
         }
         /** Whether the first item is considered to go before the second. */
-        virtual bool sort_compare( const item_location &lhs, const item_location &rhs ) const;
+        virtual bool sort_compare( const inventory_entry &lhs, const inventory_entry &rhs ) const;
         /** Color that will be used to display the entry string. */
         virtual nc_color get_color( const inventory_entry &entry ) const;
 

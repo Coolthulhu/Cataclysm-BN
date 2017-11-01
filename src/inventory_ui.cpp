@@ -119,6 +119,15 @@ nc_color inventory_entry::get_invlet_color() const
     }
 }
 
+const std::string &inventory_entry::get_sort_name() const
+{
+    if( sort_name.empty() && is_item() ) {
+        sort_name = location->tname( 1 );
+    }
+
+    return sort_name;
+}
+
 const item_category *inventory_entry::get_category_ptr() const {
     if( custom_category != nullptr ) {
         return custom_category;
@@ -160,9 +169,9 @@ inventory_selector_preset::inventory_selector_preset()
     } ) );
 }
 
-bool inventory_selector_preset::sort_compare( const item_location &lhs, const item_location &rhs ) const
+bool inventory_selector_preset::sort_compare( const inventory_entry &lhs, const inventory_entry &rhs ) const
 {
-    return lhs->tname( 1 ).compare( rhs->tname( 1 ) ) < 0; // Simple alphabetic order
+    return lhs.get_sort_name().compare( rhs.get_sort_name() ) < 0;
 }
 
 nc_color inventory_selector_preset::get_color( const inventory_entry &entry ) const
