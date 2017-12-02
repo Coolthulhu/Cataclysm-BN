@@ -7,6 +7,7 @@
 #include "character.h"
 #include "map_selector.h"
 #include "vehicle_selector.h"
+#include "bionics.h"
 #include "map.h"
 #include "submap.h"
 #include "vehicle.h"
@@ -184,7 +185,7 @@ bool visitable<Character>::has_quality( const quality_id &qual, int level, int q
 {
     auto self = static_cast<const Character *>( this );
 
-    for( const auto &bio : self->my_bionics ) {
+    for( const auto &bio : *self->my_bionics ) {
         if( bio.get_quality( qual ) >= level ) {
             if( qty <= 1 ) {
                 return true;
@@ -243,7 +244,7 @@ int visitable<Character>::max_quality( const quality_id &qual ) const
 
     auto self = static_cast<const Character *>( this );
 
-    for( const auto &bio : self->my_bionics ) {
+    for( const auto &bio : *self->my_bionics ) {
         res = std::max( res, bio.get_quality( qual ) );
     }
 
@@ -314,7 +315,7 @@ visitable<T>::items_with( const std::function<bool( const item & )> &filter ) co
 template <typename T>
 VisitResponse
 visitable<T>::visit_items( const std::function<VisitResponse( const item *,
-                                                              const item * )> &func ) const
+                           const item * )> &func ) const
 {
     return const_cast<visitable<T> *>( this )->visit_items(
                static_cast<const std::function<VisitResponse( item *, item * )>&>( func ) );

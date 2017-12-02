@@ -5639,22 +5639,6 @@ void map::add_camp( const tripoint &p, const std::string& name )
     get_submap_at( p )->camp = basecamp( name, p.x, p.y );
 }
 
-void map::debug()
-{
- mvprintw(0, 0, "MAP DEBUG");
- inp_mngr.wait_for_any_key();
- for (int i = 0; i <= SEEX * 2; i++) {
-  for (int j = 0; j <= SEEY * 2; j++) {
-   if (i_at(i, j).size() > 0) {
-    mvprintw(1, 0, "%d, %d: %d items", i, j, i_at(i, j).size());
-    mvprintw(2, 0, "%s, %d", i_at(i, j)[0].symbol().c_str(), i_at(i, j)[0].color());
-    inp_mngr.wait_for_any_key();
-   }
-  }
- }
- inp_mngr.wait_for_any_key();
-}
-
 void map::update_visibility_cache( const int zlev ) {
     visibility_variables_cache.variables_set = true; // Not used yet
     visibility_variables_cache.g_light_level = (int)g->light_level( zlev );
@@ -7077,9 +7061,9 @@ void map::actualize( const int gridx, const int gridy, const int gridz )
     }
 
     //Check for Merchants to restock
-    for( auto & i : g->active_npc ) {
-        if( i->restock > 0 && calendar::turn > i->restock ) {
-            i->shop_restock();
+    for( npc &guy : g->all_npcs() ) {
+        if( guy.restock > 0 && calendar::turn > guy.restock ) {
+            guy.shop_restock();
         }
     }
 

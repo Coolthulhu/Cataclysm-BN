@@ -214,12 +214,12 @@ TEST_CASE( "unskilled_shooter_accuracy", "[ranged] [balance]" )
     SECTION( "an unskilled shooter with an inaccurate smg" ) {
         arm_shooter( shooter, "tommygun", { "holo_sight", "barrel_big" } );
         test_shooting_scenario( shooter, 0, 5, 40 );
-        test_fast_shooting( shooter, 80, 0.3 );
+        test_fast_shooting( shooter, 70, 0.3 );
     }
     SECTION( "an unskilled shooter with an inaccurate rifle" ) {
         arm_shooter( shooter, "m1918", { "holo_sight", "pistol_grip" } );
         test_shooting_scenario( shooter, 0, 8, 45 );
-        test_fast_shooting( shooter, 100, 0.2 );
+        test_fast_shooting( shooter, 90, 0.2 );
     }
 }
 

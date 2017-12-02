@@ -384,10 +384,20 @@ void npc::randomize( const npc_class_id &type )
     starting_clothes( *this, type, male );
     starting_inv( *this, type );
     has_new_items = true;
+    my_traits.clear();
+    my_mutations.clear();
 
     for( const auto &pr : type->traits ) {
         if( rng( 1, 100 ) <= pr.second ) {
             set_mutation( pr.first );
+        }
+    }
+
+    // Run mutation rounds
+    for( const auto &mr : type->mutation_rounds ) {
+        int rounds = mr.second.roll();
+        for( int i = 0; i < rounds; ++i ) {
+            mutate_category( mr.first );
         }
     }
 }
@@ -711,7 +721,7 @@ void starting_clothes( npc &who, const npc_class_id &type, bool male )
             it.item_tags.insert( "FIT" );
         }
 
-        if( who.can_wear( it ) ) {
+        if( who.can_wear( it ).success() ) {
             who.worn.push_back( it );
         }
     }
@@ -946,7 +956,7 @@ bool npc::wear_if_wanted( const item &it )
             }
         }
 
-        if( encumb_ok && can_wear( it, false ) ) {
+        if( encumb_ok && can_wear( it ).success() ) {
             // @todo Hazmat/power armor makes this not work due to 1 boots/headgear limit
             return wear_item( it, false );
         }
@@ -1704,10 +1714,7 @@ bool npc::emergency( float danger ) const
 //Active npcs are the npcs near the player that are actively simulated.
 bool npc::is_active() const
 {
-    return std::find_if( g->active_npc.begin(),
-    g->active_npc.end(), [&]( const std::shared_ptr<npc> &n ) {
-        return n->getID() == getID();
-    } ) != g->active_npc.end();
+    return g->critter_at<npc>( pos() ) == this;
 }
 
 int npc::follow_distance() const

@@ -12,7 +12,6 @@
 #include "visitable.h"
 #include "enums.h"
 #include "json.h"
-#include "color.h"
 #include "bodypart.h"
 #include "string_id.h"
 #include "item_location.h"
@@ -22,6 +21,7 @@
 #include "units.h"
 #include "cata_utility.h"
 
+class nc_color;
 class gun_type_type;
 class gunmod_location;
 class game;
@@ -353,6 +353,19 @@ class item : public JsonSerializer, public JsonDeserializer, public visitable<it
      * the vector can be used to compare them to properties of another item.
      */
     std::string info( bool showtext, std::vector<iteminfo> &dump ) const;
+
+    /**
+    * Return all the information about the item and its type, and dump to vector.
+    *
+    * This includes the different
+    * properties of the @ref itype (if they are visible to the player). The returned string
+    * is already translated and can be *very* long.
+    * @param showtext If true, shows the item description, otherwise only the properties item type.
+    * @param dump The properties (encapsulated into @ref iteminfo) are added to this vector,
+    * the vector can be used to compare them to properties of another item.
+    * @param batch The batch crafting number to multiply data by
+    */
+    std::string info( bool showtext, std::vector<iteminfo> &dump, int batch ) const;
 
     /** Burns the item. Returns true if the item was destroyed. */
     bool burn( fire_data &bd, bool contained );

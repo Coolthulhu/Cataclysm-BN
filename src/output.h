@@ -86,7 +86,6 @@ enum game_message_type : int {
 };
 
 nc_color msgtype_to_color( const game_message_type type, const bool bOldMsg = false );
-int msgtype_to_tilecolor( const game_message_type type, const bool bOldMsg = false );
 
 /**
  * @anchor color_tags
@@ -267,16 +266,13 @@ void multipage( WINDOW *w, std::vector<std::string> text, std::string caption = 
 std::string name_and_value( std::string name, int value, int field_width );
 std::string name_and_value( std::string name, std::string value, int field_width );
 
-void mvputch( int y, int x, nc_color FG, const std::string &ch );
 void wputch( WINDOW *w, nc_color FG, long ch );
 // Using long ch is deprecated, use an UTF-8 encoded string instead
 void mvwputch( WINDOW *w, int y, int x, nc_color FG, long ch );
 void mvwputch( WINDOW *w, int y, int x, nc_color FG, const std::string &ch );
-void mvputch_inv( int y, int x, nc_color FG, const std::string &ch );
 // Using long ch is deprecated, use an UTF-8 encoded string instead
 void mvwputch_inv( WINDOW *w, int y, int x, nc_color FG, long ch );
 void mvwputch_inv( WINDOW *w, int y, int x, nc_color FG, const std::string &ch );
-void mvputch_hi( int y, int x, nc_color FG, const std::string &ch );
 // Using long ch is deprecated, use an UTF-8 encoded string instead
 void mvwputch_hi( WINDOW *w, int y, int x, nc_color FG, long ch );
 void mvwputch_hi( WINDOW *w, int y, int x, nc_color FG, const std::string &ch );

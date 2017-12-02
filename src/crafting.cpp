@@ -6,6 +6,7 @@
 #include "game.h"
 #include "game_inventory.h"
 #include "input.h"
+#include "bionics.h"
 #include "inventory.h"
 #include "itype.h"
 #include "json.h"
@@ -285,7 +286,7 @@ const inventory &player::crafting_inventory()
     cached_crafting_inventory += inv;
     cached_crafting_inventory += weapon;
     cached_crafting_inventory += worn;
-    for( const auto &bio : my_bionics ) {
+    for( const auto &bio : *my_bionics ) {
         const auto &bio_data = bio.info();
         if( ( !bio_data.activated || bio.powered ) &&
             !bio_data.fake_item.empty() ) {
@@ -515,6 +516,9 @@ void player::complete_craft()
             return;
         }
     }
+    if( !used.empty() ) {
+        reset_encumbrance();  // in case we were wearing something just consumed up.
+    }
 
     // Set up the new item, and assign an inventory letter if available
     std::vector<item> newits = making->create_results( batch_size );
@@ -690,7 +694,7 @@ comp_selection<item_comp> player::select_item_component( const std::vector<item_
         for( auto &map_ha : map_has ) {
             std::string tmpStr = string_format( _( "%s (%d/%d nearby)" ),
                                                 item::nname( map_ha.type ),
-                                                map_ha.count,
+                                                ( map_ha.count * batch ),
                                                 item::count_by_charges( map_ha.type ) ? map_inv.charges_of( map_ha.type ) : map_inv.amount_of(
                                                     map_ha.type ) );
             cmenu.addentry( tmpStr );
@@ -698,7 +702,7 @@ comp_selection<item_comp> player::select_item_component( const std::vector<item_
         for( auto &player_ha : player_has ) {
             std::string tmpStr = string_format( _( "%s (%d/%d on person)" ),
                                                 item::nname( player_ha.type ),
-                                                player_ha.count,
+                                                ( player_ha.count * batch ),
                                                 item::count_by_charges( player_ha.type ) ? charges_of( player_ha.type ) : amount_of(
                                                     player_ha.type ) );
             cmenu.addentry( tmpStr );
@@ -706,7 +710,7 @@ comp_selection<item_comp> player::select_item_component( const std::vector<item_
         for( auto &elem : mixed ) {
             std::string tmpStr = string_format( _( "%s (%d/%d nearby & on person)" ),
                                                 item::nname( elem.type ),
-                                                elem.count,
+                                                ( elem.count * batch ),
                                                 item::count_by_charges( elem.type ) ? map_inv.charges_of( elem.type ) + charges_of( elem.type ) :
                                                 map_inv.amount_of( elem.type ) + amount_of( elem.type ) );
             cmenu.addentry( tmpStr );
@@ -880,7 +884,7 @@ player::select_tool_component( const std::vector<tool_comp> &tools, int batch, i
             if( item::find_type( map_ha.type )->maximum_charges() > 1 ) {
                 std::string tmpStr = string_format( "%s (%d/%d charges nearby)",
                                                     item::nname( map_ha.type ),
-                                                    map_ha.count,
+                                                    ( map_ha.count * batch ),
                                                     map_inv.charges_of( map_ha.type ) );
                 tmenu.addentry( tmpStr );
             } else {
@@ -892,7 +896,7 @@ player::select_tool_component( const std::vector<tool_comp> &tools, int batch, i
             if( item::find_type( player_ha.type )->maximum_charges() > 1 ) {
                 std::string tmpStr = string_format( "%s (%d/%d charges on person)",
                                                     item::nname( player_ha.type ),
-                                                    player_ha.count,
+                                                    ( player_ha.count * batch ),
                                                     charges_of( player_ha.type ) );
                 tmenu.addentry( tmpStr );
             } else {
@@ -1405,13 +1409,8 @@ void remove_ammo( item *dis_item, player &p )
 
 std::vector<npc *> player::get_crafting_helpers() const
 {
-    std::vector<npc *> ret;
-    for( auto &elem : g->active_npc ) {
-        if( rl_dist( elem->pos(), pos() ) < PICKUP_RANGE && elem->is_friend() &&
-            !elem->in_sleep_state() && g->m.clear_path( pos(), elem->pos(), PICKUP_RANGE, 1, 100 ) ) {
-            ret.push_back( elem.get() );
-        }
-    }
-
-    return ret;
+    return g->get_npcs_if( [this]( const npc & guy ) {
+        return rl_dist( guy.pos(), pos() ) < PICKUP_RANGE && guy.is_friend() &&
+               !guy.in_sleep_state() && g->m.clear_path( pos(), guy.pos(), PICKUP_RANGE, 1, 100 );
+    } );
 }

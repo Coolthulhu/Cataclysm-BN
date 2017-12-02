@@ -7,6 +7,9 @@
 #include <set>
 #include <map>
 #include <memory>
+#include <array>
+#include <list>
+#include <utility>
 
 #include "game_constants.h"
 #include "cursesdef.h"
@@ -76,7 +79,6 @@ struct wrapped_vehicle {
 };
 
 typedef std::vector<wrapped_vehicle> VehicleList;
-typedef std::vector< std::pair< item *, int > > itemslice;
 typedef std::string items_location;
 struct vehicle_prototype;
 using vproto_id = string_id<vehicle_prototype>;
@@ -196,11 +198,6 @@ class map
         ~map();
 
         map &operator=( map && ) = default;
-
-        // Visual Output
-        void debug();
-
-
 
         /**
          * Sets a dirty flag on the a given cache.

@@ -1,3 +1,4 @@
+#include "advanced_inv.h"
 #include "game.h"
 #include "player.h"
 #include "output.h"
@@ -9,7 +10,6 @@
 #include "auto_pickup.h"
 #include "messages.h"
 #include "player_activity.h"
-#include "advanced_inv.h"
 #include "string_formatter.h"
 #include "compatibility.h"
 #include "enums.h"
@@ -2459,8 +2459,8 @@ void advanced_inventory::draw_minimap()
         auto pt = pc + sq.off;
         // invert the color if pointing to the player's position
         auto cl = (sq.id == AIM_INVENTORY || sq.id == AIM_WORN) ?
-            invert_color(c_ltcyan) : c_ltcyan | A_BLINK;
-        mvwputch(minimap, pt.y, pt.x, static_cast<nc_color>(cl), sym);
+            invert_color(c_ltcyan) : c_ltcyan.blink();
+        mvwputch(minimap, pt.y, pt.x, cl, sym);
     }
 
     // Invert player's tile color if exactly one pane points to player's tile

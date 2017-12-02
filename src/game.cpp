@@ -11,6 +11,7 @@
 #include "veh_type.h"
 #include "options.h"
 #include "auto_pickup.h"
+#include "bionics.h"
 #include "gamemode.h"
 #include "mapbuffer.h"
 #include "map_item_stack.h"
@@ -115,6 +116,10 @@
 #include "cata_tiles.h"
 #endif // TILES
 
+#if (defined TILES || defined _WIN32 || defined WINDOWS)
+#include "cursesport.h"
+#endif
+
 #if !(defined _WIN32 || defined WINDOWS || defined TILES)
 #include <langinfo.h>
 #endif
@@ -127,6 +132,7 @@
 #define dbg(x) DebugLog((DebugLevel)(x),D_GAME) << __FILE__ << ":" << __LINE__ << ": "
 
 const int core_version = 6;
+static constexpr int DANGEROUS_PROXIMITY = 5;
 
 /** Will be set to true when running unit tests */
 bool test_mode = false;
@@ -261,14 +267,12 @@ game::game() :
     w_status(nullptr),
     w_status2(nullptr),
     w_blackspace(nullptr),
-    dangerous_proximity(5),
     pixel_minimap_option(0),
     safe_mode(SAFE_MODE_ON),
     safe_mode_warning_logged(false),
     mostseen(0),
     gamemode(),
     user_action_counter(0),
-    lookHeight(13),
     tileset_zoom(16),
     weather_override( WEATHER_NULL )
 {
@@ -288,8 +292,6 @@ void game::load_static_data()
     inp_mngr.init();            // Load input config JSON
     // Init mappings for loading the json stuff
     DynamicDataLoader::get_instance();
-    // Only need to load names once, they do not depend on mods
-    init_names();
     narrow_sidebar = get_option<std::string>( "SIDEBAR_STYLE" ) == "narrow";
     right_sidebar = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
     fullscreen = false;
@@ -405,6 +407,7 @@ game::~game()
 // Fixed window sizes
 #define MINIMAP_HEIGHT 7
 #define MINIMAP_WIDTH 7
+static constexpr int LOOK_AROUND_HEIGHT = 13;
 
 #if (defined TILES)
 // defined in sdltiles.cpp
@@ -452,7 +455,8 @@ void game::init_ui()
     TERMX = get_terminal_width();
     TERMY = get_terminal_height();
 #else
-    getmaxyx(stdscr, TERMY, TERMX);
+    TERMY = getmaxy( stdscr );
+    TERMX = getmaxx( stdscr );
 
     // try to make FULL_SCREEN_HEIGHT symmetric according to TERMY
     if (TERMY % 2) {
@@ -2071,7 +2075,7 @@ bool game::handle_mouseview(input_context &ctxt, std::string &action)
         }
     } while (action == "MOUSE_MOVE"); // Freeze animation when moving the mouse
 
-    if (action != "TIMEOUT" && ctxt.get_raw_input().get_first_input() != ERR) {
+    if( action != "TIMEOUT" ) {
         // Keyboard event, break out of animation loop
         liveview.hide();
         return false;
@@ -4071,7 +4075,6 @@ void game::debug()
             s = _( "Location %d:%d in %d:%d, %s\n" );
             s += _( "Current turn: %d; Next spawn %d.\n%s\n" );
             s += ngettext( "%d creature exists.\n", "%d creatures exist.\n", num_creatures() );
-            s += ngettext( "%d currently active NPC.\n", "%d currently active NPCs.\n", active_npc.size() );
             s += ngettext( "%d event planned.", "%d events planned", events.size() );
             popup_top(
                 s.c_str(),
@@ -4080,23 +4083,22 @@ void game::debug()
                 int( calendar::turn ), int( nextspawn ),
                 ( get_option<bool>( "RANDOM_NPC" ) ? _( "NPCs are going to spawn." ) :
                   _( "NPCs are NOT going to spawn." ) ),
-                num_creatures(), active_npc.size(), events.size() );
-            if( !active_npc.empty() ) {
-                for( const auto &elem : active_npc ) {
-                    tripoint t = ( elem )->global_sm_location();
-                    add_msg( m_info, _( "%s: map (%d:%d) pos (%d:%d)" ), ( elem )->name.c_str(), t.x,
-                             t.y, ( elem )->posx(), ( elem )->posy() );
-                }
-
-                add_msg( m_info, _( "(you: %d:%d)" ), u.posx(), u.posy() );
+                num_creatures(), events.size() );
+            for( const npc &guy : all_npcs() ) {
+                tripoint t = guy.global_sm_location();
+                add_msg( m_info, _( "%s: map ( %d:%d ) pos ( %d:%d )" ), guy.name.c_str(), t.x,
+                         t.y, guy.posx(), guy.posy() );
             }
+
+            add_msg( m_info, _( "(you: %d:%d)" ), u.posx(), u.posy() );
+
             disp_NPCs();
             break;
         }
         case 8:
-            for( const auto &elem : active_npc ) {
-                add_msg( _( "%s's head implodes!" ), ( elem )->name.c_str() );
-                ( elem )->hp_cur[bp_head] = 0;
+            for( npc &guy : all_npcs() ) {
+                add_msg( _( "%s's head implodes!" ), guy.name.c_str() );
+                guy.hp_cur[bp_head] = 0;
             }
             break;
 
@@ -4463,12 +4465,12 @@ void game::disp_NPC_epilogues()
     std::vector<std::string> data;
     epilogue epi;
     //This search needs to be expanded to all NPCs
-    for( const auto &elem : active_npc ) {
-        if(elem->is_friend()) {
-            if (elem->male){
-                epi.random_by_group("male", elem->name);
+    for( const npc &guy : all_npcs() ) {
+        if( guy.is_friend() ) {
+            if( guy.male ) {
+                epi.random_by_group( "male", guy.name );
             } else {
-                epi.random_by_group("female", elem->name);
+                epi.random_by_group( "female", guy.name );
             }
             for( auto &ln : epi.lines ) {
                 data.push_back( ln );
@@ -5530,7 +5532,7 @@ Creature *game::is_hostile_nearby()
 
 Creature *game::is_hostile_very_close()
 {
-    return is_hostile_within(dangerous_proximity);
+    return is_hostile_within( DANGEROUS_PROXIMITY );
 }
 
 Creature *game::is_hostile_within(int distance)
@@ -5868,6 +5870,7 @@ void game::cleanup_dead()
     bool monster_is_dead = critter_tracker->kill_marked_for_death();
 
     bool npc_is_dead = false;
+    // can't use all_npcs as that does not include dead ones
     for( const auto &n : active_npc ) {
         if( n->is_dead() ) {
             n->die( nullptr ); // make sure this has been called to create corpses etc.
@@ -5995,17 +5998,14 @@ void game::monmove()
     }
 
     // Now, do active NPCs.
-    for( const auto &np : active_npc ) {
-        if( np->is_dead() ) {
-            continue;
-        }
+    for( npc &guy : g->all_npcs() ) {
         int turns = 0;
-        m.creature_in_field( *np );
-        np->process_turn();
-        while( !np->is_dead() && !np->in_sleep_state() && np->moves > 0 && turns < 10 ) {
-            int moves = np->moves;
-            np->move();
-            if( moves == np->moves ) {
+        m.creature_in_field( guy );
+        guy.process_turn();
+        while( !guy.is_dead() && !guy.in_sleep_state() && guy.moves > 0 && turns < 10 ) {
+            int moves = guy.moves;
+            guy.move();
+            if( moves == guy.moves ) {
                 // Count every time we exit npc::move() without spending any moves.
                 turns++;
             }
@@ -6015,7 +6015,7 @@ void game::monmove()
             // there will be no meaningful debug output.
             if( turns == 9 ) {
                 debugmsg( "NPC %s entered infinite loop. Turning on debug mode",
-                          np->name.c_str() );
+                          guy.name.c_str() );
                 debug_mode = true;
             }
         }
@@ -6023,13 +6023,13 @@ void game::monmove()
         // If we spun too long trying to decide what to do (without spending moves),
         // Invoke cranial detonation to prevent an infinite loop.
         if( turns == 10 ) {
-            add_msg( _( "%s's brain explodes!" ), np->name.c_str() );
-            np->die( nullptr );
+            add_msg( _( "%s's brain explodes!" ), guy.name.c_str() );
+            guy.die( nullptr );
         }
 
-        if( !np->is_dead() ) {
-            np->process_active_items();
-            np->update_body();
+        if( !guy.is_dead() ) {
+            guy.process_active_items();
+            guy.update_body();
         }
     }
     cleanup_dead();
@@ -6092,10 +6092,10 @@ void game::shockwave( const tripoint &p, int radius, int force, int stun, int da
         }
     }
     //@todo combine the two loops and the case for g->u using all_creatures()
-    for( const auto &elem : active_npc ) {
-        if( rl_dist( ( elem )->pos(), p ) <= radius ) {
-            add_msg( _( "%s is caught in the shockwave!" ), ( elem )->name.c_str() );
-            knockback( p, ( elem )->pos(), force, stun, dam_mult );
+    for( npc &guy : all_npcs() ) {
+        if( rl_dist( guy.pos(), p ) <= radius ) {
+            add_msg( _( "%s is caught in the shockwave!" ), guy.name.c_str() );
+            knockback( p, guy.pos(), force, stun, dam_mult );
         }
     }
     if( rl_dist(u.pos(), p ) <= radius && !ignore_player &&
@@ -6561,16 +6561,6 @@ void game::emp_blast( const tripoint &p )
     // TODO: Drain NPC energy reserves
 }
 
-npc *game::npc_by_id(const int id) const
-{
-    for( auto &cur_npc : active_npc ) {
-        if( cur_npc->getID() == id ) {
-            return cur_npc.get();
-        }
-    }
-    return nullptr;
-}
-
 template<typename T>
 T *game::critter_at( const tripoint &p, bool allow_hallucination )
 {
@@ -6628,6 +6618,26 @@ template std::shared_ptr<Character> game::shared_from<Character>( const Characte
 template std::shared_ptr<player> game::shared_from<player>( const player & );
 template std::shared_ptr<monster> game::shared_from<monster>( const monster & );
 template std::shared_ptr<npc> game::shared_from<npc>( const npc & );
+
+template<typename T>
+T *game::critter_by_id( const int id )
+{
+    if( id == u.getID() ) {
+        // player is always alive, therefor no is-dead check
+        return dynamic_cast<T*>( &u );
+    }
+    for( auto &cur_npc : active_npc ) {
+        if( cur_npc->getID() == id && !cur_npc->is_dead() ) {
+            return dynamic_cast<T*>( cur_npc.get() );
+        }
+    }
+    return nullptr;
+}
+
+// monsters don't have ids
+template player *game::critter_by_id<player>( int );
+template npc *game::critter_by_id<npc>( int );
+template Creature *game::critter_by_id<Creature>( int );
 
 monster *game::summon_mon( const mtype_id& id, const tripoint &p )
 {
@@ -7982,7 +7992,7 @@ void game::print_graffiti_info( const tripoint &lp, WINDOW *w_look, const int co
 void game::get_lookaround_dimensions(int &lookWidth, int &begin_y, int &begin_x) const
 {
     lookWidth = getmaxx(w_messages);
-    begin_y = TERMY - lookHeight + 1;
+    begin_y = TERMY - LOOK_AROUND_HEIGHT + 1;
     if (getbegy(w_messages) < begin_y) {
         begin_y = getbegy(w_messages);
     }
@@ -8452,7 +8462,7 @@ tripoint game::look_around( WINDOW *w_info, const tripoint &start_point,
 
     bool bNewWindow = false;
     if (w_info == nullptr) {
-        w_info = newwin(lookHeight, lookWidth, lookY, lookX);
+        w_info = newwin(LOOK_AROUND_HEIGHT, lookWidth, lookY, lookX);
         bNewWindow = true;
     }
 
@@ -8563,7 +8573,7 @@ tripoint game::look_around( WINDOW *w_info, const tripoint &start_point,
         } else {
             //Look around
             int first_line = 1;
-            const int last_line = lookHeight - 2;
+            const int last_line = LOOK_AROUND_HEIGHT - 2;
             print_all_tile_info( lp, w_info, 1, first_line, last_line, !is_draw_tiles_mode(), cache );
 
             if (fast_scroll) {
@@ -10536,30 +10546,48 @@ void game::eat(int pos)
     }
 }
 
-void game::wear(int pos)
+void game::wear()
 {
-    if (pos == INT_MIN) {
-        pos = game_menus::inv::wear( u );
-    }
+    item_location loc = game_menus::inv::wear( u );
 
-    if( pos == INT_MIN ) {
+    if( loc ) {
+        wear( loc );
+    } else {
         add_msg( _( "Never mind." ) );
-        return;
     }
+}
 
-    u.wear( pos );
+void game::wear( int pos )
+{
+    item_location loc( u, &u.i_at( pos ) );
+    wear( loc );
+}
+
+void game::wear(item_location& loc)
+{
+    u.wear( u.i_at( loc.obtain( u ) ) );
+}
+
+void game::takeoff()
+{
+    item_location loc = game_menus::inv::take_off( u );
+
+    if( loc ) {
+        takeoff( loc );
+    } else {
+        add_msg( _( "Never mind." ) );
+    }
 }
 
 void game::takeoff(int pos)
 {
-    if (pos == INT_MIN) {
-        pos = game_menus::inv::take_off( u );
-    }
-    if (pos == INT_MIN) {
-        add_msg(_("Never mind."));
-        return;
-    }
-    u.takeoff( pos );
+    item_location loc( u, &u.i_at( pos ) );
+    takeoff( loc );
+}
+
+void game::takeoff(item_location& loc)
+{
+    u.takeoff( u.i_at( loc.obtain( u ) ) );
 }
 
 void game::change_side(int pos)
@@ -10948,15 +10976,12 @@ void game::read()
 
 void game::chat()
 {
-    std::vector<npc *> available;
-    for( const auto &elem : active_npc ) {
+    const std::vector<npc *> available = get_npcs_if( [&]( const npc &guy ) {
         // @todo Get rid of the z-level check when z-level vision gets "better"
-        if( u.posz() == elem->posz() &&
-            u.sees( elem->pos() ) &&
-            rl_dist( u.pos(), elem->pos() ) <= 24 ) {
-            available.push_back( elem.get() );
-        }
-    }
+        return u.posz() == guy.posz() &&
+            u.sees( guy.pos() ) &&
+            rl_dist( u.pos(), guy.pos() ) <= 24;
+    } );
 
     uimenu nmenu;
     nmenu.text = std::string( _( "Who do you want to talk to or yell at?" ) );
@@ -13601,8 +13626,8 @@ void game::autosave()
 
 void intro()
 {
-    int maxx, maxy;
-    getmaxyx(stdscr, maxy, maxx);
+    int maxy = getmaxy( stdscr );
+    int maxx = getmaxx( stdscr );
     const int minHeight = FULL_SCREEN_HEIGHT;
     const int minWidth = FULL_SCREEN_WIDTH;
     WINDOW *tmp = newwin(minHeight, minWidth, 0, 0);
@@ -13627,7 +13652,8 @@ void intro()
         }
         wrefresh(tmp);
         inp_mngr.wait_for_any_key();
-        getmaxyx(stdscr, maxy, maxx);
+        maxy = getmaxy( stdscr );
+        maxx = getmaxx( stdscr );
     }
     werase(tmp);
 
@@ -14052,13 +14078,9 @@ overmap &game::get_cur_om() const
 
 std::vector<npc *> game::allies()
 {
-    std::vector<npc *> res;
-    for( const auto &e : active_npc ) {
-        if( !e->is_dead_state() && e->is_friend() ) {
-            res.push_back( e.get() );
-        }
-    }
-    return res;
+    return get_npcs_if( [&]( const npc &guy ) {
+        return guy.is_friend();
+    } );
 }
 
 std::vector<Creature *> game::get_creatures_if( const std::function<bool( const Creature & )> &pred )
@@ -14072,8 +14094,25 @@ std::vector<Creature *> game::get_creatures_if( const std::function<bool( const 
     return result;
 }
 
+std::vector<npc *> game::get_npcs_if( const std::function<bool( const npc & )> &pred )
+{
+    std::vector<npc *> result;
+    for( npc &guy : all_npcs() ) {
+        if( pred( guy ) ) {
+            result.push_back( &guy );
+        }
+    }
+    return result;
+}
+
 template<>
 bool game::non_dead_range<monster>::iterator::valid() {
+    current = iter->lock();
+    return current && !current->is_dead();
+}
+
+template<>
+bool game::non_dead_range<npc>::iterator::valid() {
     current = iter->lock();
     return current && !current->is_dead();
 }
@@ -14107,6 +14146,10 @@ game::Creature_range::Creature_range( game &g ) : u( &g.u, []( player * ) { } ) 
     items.push_back( u );
 }
 
+game::npc_range::npc_range( game &g ) {
+    items.insert( items.end(), g.active_npc.begin(), g.active_npc.end() );
+}
+
 game::Creature_range game::all_creatures()
 {
     return Creature_range( *this );
@@ -14115,6 +14158,11 @@ game::Creature_range game::all_creatures()
 game::monster_range game::all_monsters()
 {
     return monster_range( *this );
+}
+
+game::npc_range game::all_npcs()
+{
+    return npc_range( *this );
 }
 
 Creature *game::get_creature_if( const std::function<bool( const Creature & )> &pred )

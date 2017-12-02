@@ -35,7 +35,6 @@
 #include "mapgen.h"
 #include "speech.h"
 #include "construction.h"
-#include "name.h"
 #include "ammo.h"
 #include "debug.h"
 #include "path_info.h"
@@ -179,7 +178,7 @@ void DynamicDataLoader::initialize()
     add( "scenario", &scenario::load_scenario );
     add( "start_location", &start_location::load_location );
 
-    // json/colors.json would be listed here, but it's loaded before the others (see start_color())
+    // json/colors.json would be listed here, but it's loaded before the others (see init_colors())
     // Non Static Function Access
     add( "snippet", []( JsonObject &jo ) { SNIPPET.load_snippet( jo ); } );
     add( "item_group", []( JsonObject &jo ) { item_controller->load_item_group( jo ); } );
@@ -237,6 +236,7 @@ void DynamicDataLoader::initialize()
     add( "region_settings", &load_region_settings );
     add( "region_overlay", &load_region_overlay );
     add( "ITEM_BLACKLIST", []( JsonObject &jo ) { item_controller->load_item_blacklist( jo ); } );
+    add( "TRAIT_BLACKLIST", []( JsonObject &jo ) { mutation_branch::load_trait_blacklist( jo ); } );
     add( "WORLD_OPTION", &load_world_option );
 
     // loaded earlier.
@@ -333,13 +333,6 @@ void DynamicDataLoader::load_all_from_json( JsonIn &jsin, const std::string &src
         // not an object or an array?
         jsin.error( "expected object or array" );
     }
-}
-
-void init_names()
-{
-    const std::string filename = PATH_INFO::find_translated_file( "namesdir",
-                                 ".json", "names" );
-    Name::load_from_file(filename);
 }
 
 void DynamicDataLoader::unload_data()

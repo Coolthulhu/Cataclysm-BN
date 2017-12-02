@@ -664,6 +664,12 @@
         "color" : "i_red"
     },{
         "type" : "overmap_terrain",
+        "id" : "s_bike_shop",
+        "name" : "bike shop",
+        "copy-from" : "generic_city_building",
+        "color" : "i_cyan"
+    },{
+        "type" : "overmap_terrain",
         "id" : "s_pizza_parlor",
         "name" : "pizza parlor",
         "copy-from" : "generic_city_building",
@@ -6639,7 +6645,7 @@
     "type": "overmap_terrain",
     "name": "skate park",
     "sym": 79,
-    "color": "grey",
+    "color": "light_gray",
     "see_cost": 5,
     "mondensity": 2,
     "extras": "build",
@@ -6798,7 +6804,7 @@
     "type": "overmap_terrain",
     "name": "small cemetery",
     "sym": 67,
-    "color": "i_grey",
+    "color": "light_gray",
     "see_cost": 5,
     "mondensity": 2,
     "extras": "build",
