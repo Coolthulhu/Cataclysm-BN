@@ -1236,6 +1236,7 @@ int vehicle::install_part( const point &dp, const vehicle_part &new_part )
                 "PLOW",
                 "REAPER",
                 "PLANTER",
+                "HYDROPONICS",
                 "SCOOP",
                 "WATER_PURIFIER",
                 "ROCKWHEEL"
@@ -4487,6 +4488,9 @@ void vehicle::refresh()
         if( vpi.has_flag( "FUNNEL" ) ) {
             funnels.push_back( p );
         }
+        if( vpi.has_flag( "HYDROPONICS" ) ) {
+            hydroponics.push_back( p );
+        }
         if( vpi.has_flag( "UNMOUNT_ON_MOVE" ) ) {
             loose_parts.push_back( p );
         }
@@ -5298,6 +5302,50 @@ void vehicle::update_time( const time_point &update_to )
         if( energy_bat > 0 ) {
             add_msg( m_debug, "%s got %d kJ energy from wind turbines", name, energy_bat );
             charge_battery( energy_bat );
+        }
+    }
+}
+
+void vehicle::update_hydroponics()
+{
+    for( int idx : hydroponics ) {
+        const auto &pt = parts[idx];
+        // @todo When disabled, the plant should start dying
+        if( !pt.enabled || pt.is_unavailable() ) {
+            continue;
+        }
+
+        auto items = get_items( idx );
+        if( items.empty() ) {
+            debugmsg( "Hydroponics (part %d) in vehicle %s were active without seeds",
+                      idx, disp_name().c_str() );
+            pt.enabled = false;
+            continue;
+        }
+
+        auto &seed = items.front();
+        if( !seed.is_seed() ) {
+            debugmsg( "Hydroponics (part %d) in vehicle %s were active with a non-seed item",
+                      idx, disp_name().c_str() );
+            pt.enabled = false;
+            continue;
+        }
+
+        // Plants in hydroponics grow faster than fertilized soil-grown plants
+        // But the plant won't grow (at all) if not fertilized
+        // And will die if deprived of water
+        const time_duration effective_seed_epoch = seed.get_plant_epoch() * 0.7f;
+        int stage = static_cast<int>( seed.age() / effective_seed_epoch );
+        for( int i = 0; i < stage; i++ ) {
+            seed.set_birthday( seed.birthday() + effective_seed_epoch );
+            if( drain( "water", 1 ) == 0 && drain( "water_clean", 1 ) == 0 ) {
+                // Couldn't consume water, drop the plant a stage
+                // @todo Actually do that
+            } else if( drain( "fertilizer_liquid", 1 ) > 0 ) {
+                // Got all we need, advance a stage
+                // @todo Actually do that
+            }
+            // @todo Require light?
         }
     }
 }
