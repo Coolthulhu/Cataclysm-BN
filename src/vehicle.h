@@ -1500,6 +1500,7 @@ class vehicle
         // Retroactively pass time spent outside bubble
         // Funnels, solar panels
         void update_time( const time_point &update_to );
+        void update_hydroponics( const time_point &update_from, const time_point &update_to );
 
         // save values
         /**

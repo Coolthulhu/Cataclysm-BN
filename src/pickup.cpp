@@ -8,6 +8,7 @@
 #include "cata_utility.h"
 #include "debug.h"
 #include "game.h"
+#include "iexamine.h"
 #include "input.h"
 #include "item_location.h"
 #include "item_search.h"
@@ -26,6 +27,8 @@
 #include "vehicle.h"
 #include "vpart_position.h"
 #include "vpart_reference.h"
+
+const skill_id skill_survival( "survival" );
 
 typedef std::pair<item, int> ItemCount;
 typedef std::map<std::string, ItemCount> PickupMap;
@@ -46,6 +49,9 @@ static interact_results interact_with_vehicle( vehicle *veh, const tripoint &pos
 static void remove_from_map_or_vehicle( const tripoint &pos, vehicle *veh, int cargo_part,
                                         int moves_taken, int curmit );
 static void show_pickup_message( const PickupMap &mapPickup );
+
+static void plant_hydroponics( vehicle &veh, const tripoint &pos, int hydroponics_part );
+static void harvest_hydroponics( vehicle &veh, const tripoint &pos, int hydroponics_part );
 
 struct pickup_count {
     bool pick = false;
@@ -100,11 +106,12 @@ interact_results interact_with_vehicle( vehicle *veh, const tripoint &pos,
     const bool has_bike_rack = ( bike_rack_part >= 0 );
     const bool has_planter = veh->avail_part_with_feature( veh_root_part, "PLANTER", true ) >= 0 ||
                              veh->avail_part_with_feature( veh_root_part, "ADVANCED_PLANTER", true ) >= 0;
+    const int hydroponics_part = veh->part_with_feature( veh_root_part, "HYDROPONICS", false );
 
     enum {
         EXAMINE, TRACK, CONTROL, CONTROL_ELECTRONICS, GET_ITEMS, GET_ITEMS_ON_GROUND, FOLD_VEHICLE, UNLOAD_TURRET, RELOAD_TURRET,
         USE_HOTPLATE, FILL_CONTAINER, DRINK, USE_WELDER, USE_PURIFIER, PURIFY_TANK, USE_WASHMACHINE, USE_MONSTER_CAPTURE,
-        USE_BIKE_RACK, RELOAD_PLANTER
+        USE_BIKE_RACK, RELOAD_PLANTER, PLANT_HYDROPONICS, HARVEST_HYDROPONICS
     };
     uilist selectmenu;
 
@@ -179,6 +186,15 @@ interact_results interact_with_vehicle( vehicle *veh, const tripoint &pos,
 
     if( has_planter ) {
         selectmenu.addentry( RELOAD_PLANTER, true, 's', _( "Reload seed drill with seeds" ) );
+    }
+
+    if( hydroponics_part > -1 ) {
+        auto maybe_plant = veh->get_items( hydroponics_part );
+        if( maybe_plant.empty() ) {
+            selectmenu.addentry( PLANT_HYDROPONICS, true, 'y', _( "Plant a seed in hydroponic tray" ) );
+        } else if( maybe_plant.front().get_var( "growth_stage", 0 ) >= 3 ) {
+            selectmenu.addentry( HARVEST_HYDROPONICS, true, 'Y', _( "Harvest plant from hydroponic tray" ) );
+        }
     }
 
     int choice;
@@ -330,6 +346,14 @@ interact_results interact_with_vehicle( vehicle *veh, const tripoint &pos,
         case RELOAD_PLANTER:
             veh->reload_seeds( pos );
             return DONE;
+
+        case PLANT_HYDROPONICS:
+            plant_hydroponics( *veh, pos, hydroponics_part );
+            return DONE;
+
+        case HARVEST_HYDROPONICS:
+            harvest_hydroponics( *veh, pos, hydroponics_part );
+            return ITEMS_FROM_GROUND;
     }
 
     return DONE;
@@ -1235,6 +1259,67 @@ void show_pickup_message( const PickupMap &mapPickup )
                      entry.second.first.display_name( entry.second.second ).c_str() );
         }
     }
+}
+
+void plant_hydroponics( vehicle &veh, const tripoint &, int hydroponic_index )
+{
+    // Copypasted from iexamine::dirtmound
+    // @todo Deduplicate
+    std::vector<item *> seed_inv = g->u.items_with( []( const item &itm ) {
+    return itm.is_seed();
+    } );
+    if( seed_inv.empty() ) {
+        add_msg(m_info, _("You have no seeds to plant."));
+        return;
+    }
+
+    auto seed_entries = iexamine::get_seed_entries( seed_inv );
+    int seed_index = iexamine::query_seed( seed_entries );
+
+    if( seed_index < 0 || seed_index >= static_cast<int>( seed_entries.size() ) ) {
+        add_msg(_("You saved your seeds for later."));
+        return;
+    }
+    const auto &seed_id = std::get<0>( seed_entries[seed_index] );
+    // Copypasted from iexamine::plant_seed
+    // @todo Deduplicate
+    std::list<item> used_seed;
+    if( item::count_by_charges( seed_id ) ) {
+        used_seed = g->u.use_charges( seed_id, 1 );
+    } else {
+        used_seed = g->u.use_amount( seed_id, 1 );
+    }
+    used_seed.front().set_age( 0_turns );
+    veh.get_items( hydroponic_index ).push_back( used_seed.front() );
+    g->u.moves -= 500;
+    add_msg( _( "Planted %s in %s." ), item::nname( seed_id ).c_str(),
+             veh.parts[ hydroponic_index ].name().c_str() );
+}
+
+void harvest_hydroponics( vehicle &veh, const tripoint &pos, int hydroponic_index )
+{
+    auto items = veh.get_items( hydroponic_index );
+    if( items.size() != 1 ) {
+        debugmsg( "Tried to harvest hydroponics with non-1 item count" );
+        return;
+    }
+    const itype &type = *items.front().type;
+    items.clear();
+    // Copypasted from iexamine::harvest_plant
+    // @todo Deduplicate
+    int skillLevel = g->u.get_skill_level( skill_survival );
+    ///\EFFECT_SURVIVAL increases number of plants harvested from a seed
+    int plantCount = rng(skillLevel / 2, skillLevel);
+    if (plantCount >= 12) {
+        plantCount = 12;
+    } else if( plantCount <= 0 ) {
+        plantCount = 1;
+    }
+    const int seedCount = std::max( 1l, rng( plantCount / 4, plantCount / 2 ) );
+    for( auto &i : iexamine::get_harvest_items( type, plantCount, seedCount, true ) ) {
+        g->m.add_item_or_charges( pos, i );
+    }
+    g->u.moves -= 500;
 }
 
 bool Pickup::handle_spillable_contents( Character &c, item &it, map &m )

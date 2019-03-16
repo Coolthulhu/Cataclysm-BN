@@ -4070,7 +4070,10 @@ void vehicle::idle( bool on_map )
     if( !on_map ) {
         return;
     } else {
+        const auto before_update = last_update;
         update_time( calendar::turn );
+        // Ideally, we'd alternate update time and hydro for ~1 day each
+        update_hydroponics( before_update, calendar::turn );
     }
 
     if( has_part( "STEREO", true ) ) {
@@ -5306,19 +5309,19 @@ void vehicle::update_time( const time_point &update_to )
     }
 }
 
-void vehicle::update_hydroponics()
+void vehicle::update_hydroponics( const time_point &update_from, const time_point &update_to )
 {
+    // Note: this isn't about one hour difference, but specifically rounding down to different hours
+    if( to_turn<int>( update_from ) / HOURS( 1 ) != to_turn<int>( update_to ) / HOURS( 1 ) ) {
+        return;
+    }
+
+    const time_duration time_diff = update_to - update_from;
     for( int idx : hydroponics ) {
-        const auto &pt = parts[idx];
-        // @todo When disabled, the plant should start dying
-        if( !pt.enabled || pt.is_unavailable() ) {
-            continue;
-        }
+        auto &pt = parts[idx];
 
         auto items = get_items( idx );
         if( items.empty() ) {
-            debugmsg( "Hydroponics (part %d) in vehicle %s were active without seeds",
-                      idx, disp_name().c_str() );
             pt.enabled = false;
             continue;
         }
@@ -5327,25 +5330,30 @@ void vehicle::update_hydroponics()
         if( !seed.is_seed() ) {
             debugmsg( "Hydroponics (part %d) in vehicle %s were active with a non-seed item",
                       idx, disp_name().c_str() );
+            items.clear();
             pt.enabled = false;
+            continue;
+        }
+
+        // If disabled, prevent growth. Don't wait for difference to reach epoch.
+        if( !pt.enabled || pt.is_unavailable() ) {
+            seed.set_birthday( seed.birthday() + time_diff );
             continue;
         }
 
         // Plants in hydroponics grow faster than fertilized soil-grown plants
         // But the plant won't grow (at all) if not fertilized
-        // And will die if deprived of water
         const time_duration effective_seed_epoch = seed.get_plant_epoch() * 0.7f;
-        int stage = static_cast<int>( seed.age() / effective_seed_epoch );
-        for( int i = 0; i < stage; i++ ) {
-            seed.set_birthday( seed.birthday() + effective_seed_epoch );
-            if( drain( "water", 1 ) == 0 && drain( "water_clean", 1 ) == 0 ) {
-                // Couldn't consume water, drop the plant a stage
-                // @todo Actually do that
+        // Don't use age because we want to update to update_to, not current turn
+        int stages_up = static_cast<int>( ( update_to - seed.birthday() ) / effective_seed_epoch );
+        for( int i = 0; i < stages_up; i++ ) {
+            if( ( drain( "water", 1 ) == 0 && drain( "water_clean", 1 ) == 0 ) ) {
+                // Couldn't consume water, the plant "gets younger" and thus skips a stage
+                seed.set_birthday( seed.birthday() + effective_seed_epoch );
             } else if( drain( "fertilizer_liquid", 1 ) > 0 ) {
                 // Got all we need, advance a stage
-                // @todo Actually do that
+                seed.set_var( "growth_stage", seed.get_var( "growth_stage", 0 ) + 1 );
             }
-            // @todo Require light?
         }
     }
 }

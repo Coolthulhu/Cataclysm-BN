@@ -2470,6 +2470,31 @@
   },
   {
     "type": "vehicle_part",
+    "id": "hydroponics",
+    "name": "hydroponic tray",
+    "symbol": "=",
+    "color": "light_green",
+    "broken_symbol": "*",
+    "broken_color": "light_green",
+    "damage_modifier": 10,
+    "bonus": 7,
+    "power": -150,
+    "durability": 50,
+    "description": "A hydroponic tray, to grow plants without soil.  Requires supply of water and liquid fertilizer in vehicle's tanks, otherwise the plants won't grow.  Includes light and heating.",
+    "item": "hydroponic_tray",
+    "difficulty": 3,
+    "location": "cargo",
+    "size": 10,
+    "flags": [ "HYDROPONICS", "MISC_LIGHT", "ENABLED_DRAINS_EPOWER" ],
+    "breaks_into": [
+      { "item": "cable", "charges": [ 3, 6 ] },
+      { "item": "e_scrap", "count": [ 4, 10 ] },
+      { "item": "plastic_chunk", "count": [ 1, 3 ] },
+      { "item": "scrap", "count": [ 2, 6 ] }
+    ]
+  },
+  {
+    "type": "vehicle_part",
     "id": "cargo_lock",
     "name": "cargo lock",
     "symbol": "+",
