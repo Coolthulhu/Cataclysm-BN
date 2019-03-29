@@ -236,6 +236,12 @@ int vehicle_part::ammo_set( const itype_id &ammo, long qty )
         return base.ammo_remaining();
     }
 
+    if( is_hydroponics() ) {
+        base.contents.clear();
+        base.emplace_back( ammo, calendar::turn, 1 );
+        return 1;
+    }
+
     return -1;
 }
 
@@ -468,6 +474,11 @@ bool vehicle_part::is_turret() const
 bool vehicle_part::is_seat() const
 {
     return info().has_flag( "SEAT" );
+}
+
+bool vehicle_part::is_hydroponics() const
+{
+    return info().has_flag( "HYDROPONICS" );
 }
 
 const vpart_info &vehicle_part::info() const

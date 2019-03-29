@@ -1221,6 +1221,18 @@
         "price":3500,
         "volume":29
     },{
+        "type":"GENERIC",
+        "id":"hydroponics_item",
+        "symbol":"/",
+        "name":"hydroponic tray",
+        "color":"dark_green",
+        "description":"A hydroponic tray, to grow plant without soil.  Must be connected to a frame.  Requires water, power and liquid fertilizer to work.",
+        "weight": 5000,
+        "material": ["steel","plastic"],
+        "category": "veh_parts",
+        "price": 5000,
+        "volume": 30
+    },{
         "id": "car_headlight",
         "type":"GENERIC",
         "name": "car headlight",

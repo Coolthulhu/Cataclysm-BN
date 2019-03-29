@@ -287,6 +287,8 @@ struct vehicle_part {
         /** Can a player or NPC use this part as a seat? */
         bool is_seat() const;
 
+        /** Can this part support plants? */
+        bool is_hydroponics() const;
         /*@}*/
 
     public:
